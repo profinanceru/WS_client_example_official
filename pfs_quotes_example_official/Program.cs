@@ -18,16 +18,16 @@ namespace pfs_quotes_example
     class Program
     {
         /// <summary>
-        /// URL сервера котировок ProFinance. Уточняется у техподдержки 
+        /// URL сервера котировок ProFinance. Запрашивается у техподдержки 
         /// </summary>
         const string PFS_URL = "<request url from PFS>";
         /// <summary>
-        /// Ваш персональный иденьтификатор доступа. Запроашивается у техподдержки
+        /// Ваш персональный идентификатор доступа. Запрашивается у техподдержки
         /// </summary>
         const string PFS_ID = "<request ID from PFS>";
 
         /// <summary>
-        /// Тестовый тикеры
+        /// Тестовые тикеры
         /// </summary>
         static readonly string[] TICKERS = new string[]
             {
@@ -106,7 +106,7 @@ namespace pfs_quotes_example
 
         private static void Quotes_OnSessionFinishedByNewLoginEvent(PFSQuotesAPI obj)
         {
-            System.Console.WriteLine($"Текущая сессия закрыта, потому что на сервере была открыта новая для данного <id>.");
+            System.Console.WriteLine($"Текущая сессия закрыта, потому что на сервере была открыта новая сессия для данного <id>.");
         }
 
         private static void Quotes_OnResultEvent(PFSQuotesAPI arg1, Result arg2)
@@ -172,7 +172,7 @@ namespace pfs_quotes_example
 
         private static void Quotes_OnDisposedEvent(PFSQuotesAPI obj)
         {
-            System.Console.WriteLine($"PFS API завершен.");
+            System.Console.WriteLine($"PFS API завершён.");
         }
 
 
