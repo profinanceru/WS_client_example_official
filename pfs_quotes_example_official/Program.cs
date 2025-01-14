@@ -9,9 +9,9 @@ using System.Diagnostics;
 using System.Net.Sockets;
 using System.Globalization;
 using System.Security.Cryptography;
+
 using PFSQuotes;
 using System.Collections;
-using System.Net.NetworkInformation;
 
 namespace pfs_quotes_example
 {
@@ -20,31 +20,75 @@ namespace pfs_quotes_example
         /// <summary>
         /// URL сервера котировок ProFinance. Уточняется у техподдержки 
         /// </summary>
-        const string PFS_URL = @"<request url from PFS>";
+        const string PFS_URL = "<request url from PFS>";
         /// <summary>
-        /// Ваш персональный идентификатор доступа. Уточняется у техподдержки 
+        /// Ваш персональный иденьтификатор доступа. Запроашивается у техподдержки
         /// </summary>
         const string PFS_ID = "<request ID from PFS>";
+
         /// <summary>
-        /// Тестовые тикеры - для примера 
-        /// Список доступных тикеров и их имена необходимо учтонять в техподдержке
+        /// Тестовый тикеры
         /// </summary>
         static readonly string[] TICKERS = new string[]
             {
-                "JPYRUB", "goldgrrub", "gold", "silver"
+               "JPYRUB", "gold", "goldgrrub", "silver"
             };
+
 
         static void Main(string[] args)
         {
+            HashSet<char> keys = new HashSet<char>(new char[]{'1', '2', '3'});
+            ConsoleKeyInfo key;
+            do
+            {
+                System.Console.Write("\nВыберите опцию:\n 1-Онлайн\n 2-Снапшот\n 3-Завершить\nВыбор:");
+                key = System.Console.ReadKey();
+            } while (!keys.Contains(key.KeyChar));
+            if (key.KeyChar == '1')
+                Online();
+            else if (key.KeyChar == '2')
+                Snapshot();
+        }
+
+        static void Snapshot()
+        {
+            System.Console.WriteLine();
+            using (PFSQuotesAPI quotes = new PFSQuotesAPI(PFS_URL, PFS_ID, true))
+            {
+                try
+                {
+                    var list = quotes.GetMarketData(TICKERS);
+                    if (list != null)
+                    {
+                        System.Console.WriteLine("-------- Рыночные данные -----------");
+                        foreach (var item in list)
+                            System.Console.WriteLine(item);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Console.WriteLine(ex);
+                }
+                System.Console.WriteLine("Нажмите ENTER для завершения...");
+                // Ждем нажатия на ентер
+                System.Console.ReadLine();
+            }
+        }
+
+        static void Online()
+        {
+            System.Console.WriteLine();
             // Создаем интерфейс доступа к котировкам
             using (PFSQuotesAPI quotes = new PFSQuotesAPI(PFS_URL, PFS_ID))
             {
-                //// Подключаемся к событиям
                 // События котировок/пинга
                 quotes.OnQuoteEvent += Quotes_OnQuoteEvent;
                 quotes.OnLastPriceEvent += Quotes_OnLastPriceEvent;
                 quotes.OnTradeEvent += Quotes_OnTradeEvent;
                 quotes.OnPingEvent += Quotes_OnPingEvent;
+                quotes.OnResultEvent += Quotes_OnResultEvent;
+                quotes.OnSessionFinishedByNewLoginEvent += Quotes_OnSessionFinishedByNewLoginEvent;
+
                 // События состояния соединения
                 quotes.OnStartConnectEvent += Quotes_OnStartConnectEvent;
                 quotes.OnConnectedEvent += Quotes_OnConnectedEvent;
@@ -54,22 +98,32 @@ namespace pfs_quotes_example
                 quotes.OnDisposedEvent += Quotes_OnDisposedEvent;
                 // Запускаем подключение 
                 quotes.Start("PFS Example");
-
+                // Ждем нажатия на ентер
+                System.Console.WriteLine("Нажмите ENTER для завершения...");
                 System.Console.ReadLine();
             }
-            System.Console.ReadLine();
+        }
+
+        private static void Quotes_OnSessionFinishedByNewLoginEvent(PFSQuotesAPI obj)
+        {
+            System.Console.WriteLine($"Текущая сессия закрыта, потому что на сервере была открыта новая для данного <id>.");
+        }
+
+        private static void Quotes_OnResultEvent(PFSQuotesAPI arg1, Result arg2)
+        {
+            System.Console.WriteLine($"Result: {arg2}");
         }
 
         #region // События приема сообщений с сервера
 
-        private static void Quotes_OnPingEvent(PFSQuotesAPI sender, PFSQuotes.Ping ping)
+        private static void Quotes_OnPingEvent(PFSQuotesAPI sender, Ping ping)
         {
             System.Console.WriteLine($"Ping: {ping}");
         }
 
         private static void Quotes_OnTradeEvent(PFSQuotesAPI sender, Trade trade)
         {
-            System.Console.WriteLine($"Last Price: {trade}");
+            System.Console.WriteLine($"Trade Price: {trade}");
         }
 
         private static void Quotes_OnLastPriceEvent(PFSQuotesAPI sender, LastPrice lastPrice)
@@ -88,17 +142,17 @@ namespace pfs_quotes_example
 
         private static void Quotes_OnStartConnectEvent(PFSQuotesAPI sender)
         {
-            System.Console.WriteLine($"Connecting to the server...");
+            System.Console.WriteLine($"Подключаемся к серверу...");
         }
 
         private static void Quotes_OnConnectedEvent(PFSQuotesAPI sender)
         {
-            System.Console.WriteLine($"Connection to the server is established. Opening session...");
+            System.Console.WriteLine($"Соединение с сервером установлено. Открываем сессию...");
         }
 
         private static string[] Quotes_OnOpenedEvent(PFSQuotesAPI sender, string sessionId)
         {
-            System.Console.WriteLine($"Session is open. Session Id {sessionId}");
+            System.Console.WriteLine($"Сессия открыта. Session Id {sessionId}");
             // для того, чтобы автоматически переподписаться на инструменты, 
             // можно вернуть список тикеров в этом событии
             return TICKERS;
@@ -108,17 +162,17 @@ namespace pfs_quotes_example
 
         private static void Quotes_OnConnectionLostEvent(PFSQuotesAPI sender, Exception ex)
         {
-            System.Console.WriteLine($"Connection Lost: {ex.Message}");
+            System.Console.WriteLine($"Соединение утеряно: {ex.Message}");
         }
 
         private static void Quotes_OnReconnectFailedEvent(PFSQuotesAPI sender, Exception ex)
         {
-            System.Console.WriteLine($"Reconnection failed with: {ex.Message}");
+            System.Console.WriteLine($"Повторное установление соединения не удалось. Причина: {ex.Message}");
         }
 
         private static void Quotes_OnDisposedEvent(PFSQuotesAPI obj)
         {
-            System.Console.WriteLine($"PFS API is disposed.");
+            System.Console.WriteLine($"PFS API завершен.");
         }
 
 
