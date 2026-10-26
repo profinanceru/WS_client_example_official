@@ -1,0 +1,216 @@
+Market Data API Specification
+
+1. Opening the Service
+
+The client application must establish a WebSocket connection to the endpoint provided by the service provider. Immediately after the connection is established, the client must send an `open` request to open the service [4.1.a].
+
+The request includes a unique client identifier, `<session_id>`, provided by the service provider. If the service is opened successfully, the server sends an `init` message [4.1.b] containing the client identifier. If the service cannot be opened, the server returns a `result` message [4.1.c].
+
+If an active session with the same `<session_id>` already exists on the server, successfully opening a new session terminates the previous one. The client application using the previous session receives a `finish` notification [4.1.d], after which the server closes that client's WebSocket connection.
+
+2. Keeping the Session Alive
+
+To keep a session active, the client must periodically send a `ping` request to the server [4.2]. This request extends the session lifetime and helps detect possible communication delays between the client and the server.
+
+The request must include the client identifier `<session_id>`. A ping request identifier, `<ping_id>`, may also be included, but it is optional.
+
+3. Subscribing to Market Data
+
+The service provider determines which market data is available. Three types of market data messages are supported [5]:
+
+- Quote (spread) — the current bid (`bid`) and ask (`ask`) prices [5.1].
+- Trade — the price and volume of a trade [5.3].
+- Last Price — an averaged spread value, together with additional fields describing the price change relative to the close of the instrument's previous trading session [5.2].
+
+Each market data message includes the instrument ticker and a UTC timestamp.
+
+To manage subscriptions, the client sends either a request to replace the current subscription list [4.3] or a request to add instruments to it [4.4]. Both requests include the client identifier `<session_id>` and a list of tickers.
+
+3.1. Replacing the Subscription List
+
+The `update` request [4.3] replaces the current subscription list with the supplied list of tickers. The server unsubscribes from instruments that are absent from the new list and subscribes to instruments that were not previously included.
+
+A single request therefore handles all changes to the subscription list; there is no need to unsubscribe from removed instruments separately.
+
+To cancel all subscriptions, send an `update` request with an empty ticker list.
+
+3.2. Adding Instruments to the Subscription List
+
+The `add` request [4.4] adds the specified instruments to the current subscription list. Existing subscriptions remain unchanged, while instruments not already subscribed to are added.
+
+Unlike `update`, the `add` request does not cancel subscriptions for instruments absent from the supplied list. An `add` request with an empty ticker list leaves the current subscriptions unchanged.
+
+4. Service Message Formats
+
+4.1. Opening the Service
+
+4.1.a. Service opening request:
+
+{ "msg": "open", "sid": "<session_id>" }
+
+4.1.b. Successful service opening response:
+
+{ "msg": "init", "sid": "<session_id>" }
+
+4.1.c. Service opening error response:
+
+{ "msg": "result", "respCode": "<error_code>", "message": "<error_description>" }
+
+4.1.d. Notification that the previous session has been terminated after a new session was opened:
+
+{ "msg": "finish", "sid": "<session_id>" }
+
+4.2. Keeping the Session Alive (Ping)
+
+Request:
+
+{ "msg": "ping", "sid": "<session_id>", "pid": "<ping_id>" }
+
+Server response:
+
+{ "msg": "ping", "sid": "<session_id>", "pid": "<ping_id>" }
+
+The `pid` parameter is optional.
+
+4.3. Replacing the Subscription List
+
+Request:
+
+{ "msg": "update", "sid": "<session_id>", "tickers": ["ticker1", "ticker2", "tickerN"] }
+
+4.4. Adding Instruments to the Subscription List
+
+Request:
+
+{ "msg": "add", "sid": "<session_id>", "tickers": ["ticker1", "ticker2", "tickerN"] }
+
+5. Market Data Message Formats
+
+5.1. Quote
+
+{
+  "msg": "quote",
+  "ticker": "<ticker>",
+  "bid": "<bid_price>",
+  "ask": "<ask_price>",
+  "utcdt": "<dd-MM-yyyy HH:mm:ss.ffffff>"
+}
+
+5.2. Last Price
+
+{
+  "msg": "lastprice",
+  "ticker": "<ticker>",
+  "last": "<last_price>",
+  "netchange": "<netchange>",
+  "netchangepers": "<netchangepercent>%",
+  "utcdt": "<dd-MM-yyyy HH:mm:ss.ffffff>"
+}
+
+5.3. Trade
+
+{
+  "msg": "trade",
+  "ticker": "<ticker>",
+  "price": "<trade_price>",
+  "size": "<trade_size>",
+  "utcdt": "<dd-MM-yyyy HH:mm:ss.ffffff>"
+}
+
+6. Server Response Codes (`result` Message)
+
+VALUE_RESP_SUCCESS = 0
+
+The request was processed successfully.
+
+VALUE_RESP_INVPARAM = 1
+
+The request contains an invalid parameter. The server identifies the parameter that caused the error in the `message` field.
+
+VALUE_RESP_FORBIDDEN = 4
+
+The current server configuration does not permit the requested operation, or the client identifier has been blocked.
+
+VALUE_RESP_REJECTED = 7
+
+The client's request was rejected. The reason is provided in the `message` field.
+
+The response code is transmitted in the `respCode` field as a string (for example, "0" or "1").
+
+7. Requesting the Latest Market Data
+
+The API allows clients to retrieve the latest available market data through a separate request. The response contains data for the instruments whose tickers are specified in the request. Data is returned only for instruments the client is authorized to access.
+
+This functionality is offered as a separate service. To enable it, contact the support team.
+
+7.1. Request Format
+
+The request is sent over HTTP to an endpoint provided after the service has been enabled.
+
+HTTP method: GET
+
+Request format:
+
+https://<endpoint>?sid=<client_identifier>&tickers=<ticker_list>
+
+Parameters:
+
+- `sid` — a unique string client identifier provided by the support team.
+- `tickers` — a list of instrument tickers separated by semicolons (`;`).
+
+Example:
+
+https://<endpoint>?sid=3mx7mt7&tickers=EURUSD;BTCUSD
+
+7.2. Successful Response
+
+If the request is processed successfully, the server returns a `result` message with the string value "0" in the `respCode` field.
+
+The `message` field contains a JSON array of the latest available market data for the requested instruments, not a string containing serialized JSON.
+
+Example response (illustrative values):
+
+{
+  "msg": "result",
+  "respCode": "0",
+  "message": [
+    {
+      "msg": "quote",
+      "ticker": "EURUSD",
+      "bid": "1.1750",
+      "ask": "1.1752",
+      "utcdt": "26-10-2026 14:30:15.123456"
+    },
+    {
+      "msg": "lastprice",
+      "ticker": "BTCUSD",
+      "last": "68000",
+      "netchange": "1250",
+      "netchangepers": "1.87%",
+      "utcdt": "26-10-2026 14:30:15.123456"
+    }
+  ]
+}
+
+Each array element is a market data message of one of the types described in Section 5.
+
+If an instrument does not exist, its ticker is invalid, or the client is not authorized to access it, data for that instrument is omitted from the response.
+
+7.3. Error Response
+
+If the request cannot be processed, the server returns a `result` message with the corresponding error code.
+
+Response format:
+
+{
+  "msg": "result",
+  "respCode": "<error_code>",
+  "message": "<error_description>"
+}
+
+Response fields:
+
+- `respCode` — a string error code listed in Section 6.
+- `message` — a textual description of the error, as described in Section 6.
+
+The type of the `message` field therefore depends on the outcome: it contains a JSON array on success and an error description string on failure.
